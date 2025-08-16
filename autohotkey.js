@@ -1,24 +1,28 @@
-#Persistent            ; Keeps the script running
-SetTitleMatchMode, 2   ; Allows partial matches in window titles
-
-; Path to your Run button (text version check)
-checkInterval := 5000  ; Check every 5 seconds
-
-SetTimer, AutoRun, %checkInterval%
+#Persistent
+SetTitleMatchMode, 2
+SetTimer, AutoRun, 5000 ; check every 5 seconds
 
 AutoRun:
-    ; Look for Chrome/Edge window with Replit open
     IfWinExist, Replit
     {
-        WinActivate  ; Bring Replit window to front (optional)
-        
-        ; Move mouse to the Run button position and click
-        ; !!! Adjust coordinates once (see step 3 below) !!!
-        ControlGetText, btnText, Chrome_RenderWidgetHostHWND1, A
-        
-        ; Example: if the Run button is always at fixed coordinates
-        MouseMove, 942, 53   ; X,Y coordinates of Run button inside browser
-        Click
-        Sleep 100
+        WinActivate
+        CoordMode, Mouse, Window
+        CoordMode, Pixel, Window
+
+        ; Read the color at Run/Stop button location
+        PixelGetColor, color, 942, 53, RGB
+
+        ; Example check: Run button is usually green, Stop button is usually red
+        if (color = 0x3EB489) ; replace with actual Run button color
+        {
+            MouseMove, 942, 53
+            Click
+            Sleep, 100
+            ToolTip, ▶️ Project restarted
+        }
+        else
+        {
+            ToolTip, ⏸ Project still running
+        }
     }
 return
