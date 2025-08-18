@@ -175,7 +175,7 @@ function createBot() {
 
       // Stop the project
       wait(5000)
-      process.exit(0);
+      createBot();
    });
 
    bot.on('error', (err) =>
