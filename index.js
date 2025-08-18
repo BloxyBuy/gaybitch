@@ -25,9 +25,6 @@ function randomUsername(length = 10) {
   return result;
 }
 
-// assign a random username at startup
-config["bot-account"]["username"] = randomUsername(16);
-
 let bot; // global reference
 
 function restartBot() {
@@ -41,15 +38,15 @@ function restartBot() {
     }
   }
 
-  // re-generate username if you want it fresh each time:
-  // config["bot-account"]["username"] = randomUsername(16);
-
   setTimeout(() => {
     createBot();
   }, config.utils['auto-recconect-delay'] || 5000);
 }
 
 function createBot() {
+  // 👇 generate a new random username each time
+  config["bot-account"]["username"] = randomUsername(16);
+
   bot = mineflayer.createBot({
     username: config['bot-account']['username'],
     password: config['bot-account']['password'],
@@ -112,7 +109,7 @@ function createBot() {
   }
 
   bot.once('spawn', () => {
-    console.log('\x1b[33m[AfkBot] Bot joined the server', '\x1b[0m');
+    console.log(`\x1b[33m[AfkBot] Bot joined the server as ${config['bot-account']['username']}`, '\x1b[0m');
 
     if (config.utils['auto-auth'].enabled) {
       console.log('[INFO] Started auto-auth module');
