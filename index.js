@@ -5,17 +5,29 @@ const { GoalBlock } = require('mineflayer-pathfinder').goals;
 
 const config = require('./settings.json');
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 
+// === Express + Socket.io setup ===
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-app.get('/', (req, res) => {
-  res.send('Bot has arrived');
+app.use(express.static("public")); // serve console frontend
+
+server.listen(8000, () => {
+  console.log('Web server + Socket.io started on http://<your-vm-ip>:8000');
 });
 
-app.listen(8000, () => {
-  console.log('Server started');
-});
+// === Patch console.log so logs also show in browser ===
+const oldLog = console.log;
+console.log = (...args) => {
+  const msg = args.join(" ");
+  oldLog(msg);         // still log in VM terminal
+  io.emit("log", msg); // broadcast to browser
+};
 
+// === Utility: Random Username Generator ===
 function randomUsername(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
@@ -27,6 +39,7 @@ function randomUsername(length = 10) {
 
 let bot; // global reference
 
+// === Restart Bot Helper ===
 function restartBot() {
   if (bot) {
     console.log("[INFO] Restarting bot...");
@@ -43,6 +56,7 @@ function restartBot() {
   }, config.utils['auto-recconect-delay'] || 5000);
 }
 
+// === Main Bot Creation Function ===
 function createBot() {
   // 👇 generate and log new username each time
   config["bot-account"]["username"] = randomUsername(16);
@@ -64,6 +78,7 @@ function createBot() {
 
   let pendingPromise = Promise.resolve();
 
+  // === Auto Register ===
   function sendRegister(password) {
     return new Promise((resolve, reject) => {
       bot.chat(`/register ${password} ${password}`);
@@ -87,6 +102,7 @@ function createBot() {
     });
   }
 
+  // === Auto Login ===
   function sendLogin(password) {
     return new Promise((resolve, reject) => {
       bot.chat(`/login ${password}`);
@@ -109,6 +125,7 @@ function createBot() {
     });
   }
 
+  // === On Spawn ===
   bot.once('spawn', () => {
     console.log(`\x1b[33m[AfkBot] Bot joined the server as ${config['bot-account']['username']}\x1b[0m`);
 
@@ -165,6 +182,7 @@ function createBot() {
     }
   });
 
+  // === Bot Events ===
   bot.on('goal_reached', () => {
     console.log(
       `\x1b[32m[AfkBot] Bot arrived at the target location. ${bot.entity.position}\x1b[0m`
