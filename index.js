@@ -16,23 +16,32 @@ server.listen(8000, '0.0.0.0', () => {
   console.log('Web server + Socket.io started on http://<your-vm-ip>:8000');
 });
 
-// === Log buffer for sending past logs to new clients ===
+// === Log buffer to store all logs ===
 let logBuffer = [];
-const MAX_LOG_LINES = 1000;
 
-// === Patch console.log for CMD colors + web logs ===
+// === Patch console.log to log to CMD + buffer + web ===
 const oldLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
-  oldLog(msg);           // CMD log
-  logBuffer.push(msg);   // save to buffer
-  if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift(); // remove oldest
-  io.emit("log", msg);   // broadcast to browser
+  oldLog(msg); // CMD
+  logBuffer.push(msg);
+  io.emit("log", ansiToHtml(msg)); // Web
 };
 
-// === Send past logs to new clients ===
+// === Utility: Convert ANSI colors to HTML ===
+function ansiToHtml(text) {
+  return text
+    .replace(/\u001b\[32m/g, '<span style="color:green">')   // green
+    .replace(/\u001b\[33m/g, '<span style="color:orange">')  // yellow/orange
+    .replace(/\u001b\[31m/g, '<span style="color:red">')     // red
+    .replace(/\u001b\[0m/g, '</span>');                      // reset
+}
+
+// === Send full log buffer to new client ===
 io.on("connection", (socket) => {
-  logBuffer.forEach(line => socket.emit("log", line));
+  logBuffer.forEach(line => {
+    socket.emit("log", ansiToHtml(line));
+  });
 });
 
 // === Utility: Random Username Generator ===
@@ -45,7 +54,7 @@ function randomUsername(length = 10) {
   return result;
 }
 
-let bot; // global reference
+let bot; // global bot reference
 
 // === Restart Bot Helper ===
 function restartBot() {
@@ -58,13 +67,10 @@ function restartBot() {
       console.error("[WARN] Error while ending bot:", err.message);
     }
   }
-
-  setTimeout(() => {
-    createBot();
-  }, config.utils['auto-recconect-delay'] || 5000);
+  setTimeout(() => createBot(), config.utils['auto-recconect-delay'] || 5000);
 }
 
-// === Main Bot Creation Function ===
+// === Main Bot Creation ===
 function createBot() {
   config["bot-account"]["username"] = randomUsername(16);
   console.log(`[INFO] Generated new username: ${config["bot-account"]["username"]}`);
@@ -82,10 +88,11 @@ function createBot() {
   bot.loadPlugin(pathfinder);
   const mcData = require('minecraft-data')(bot.version);
   const defaultMove = new Movements(bot, mcData);
-  bot.settings.colorsEnabled = true;
+  bot.settings.colorsEnabled = false;
 
   let pendingPromise = Promise.resolve();
 
+  // === Debug Events ===
   bot.on('login', () => console.log('[DEBUG] Bot is logging in...'));
   bot.on('spawn', () => console.log('[DEBUG] Bot spawned successfully!'));
   bot.on('end', () => console.log('[DEBUG] Bot connection ended.'));
@@ -98,10 +105,8 @@ function createBot() {
 
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
-        if (message.includes('successfully registered')) resolve();
-        else if (message.includes('already registered')) resolve();
-        else if (message.includes('Invalid command')) reject(`Registration failed: Invalid command. Message: "${message}"`);
-        else reject(`Registration failed: unexpected message "${message}".`);
+        if (message.includes('successfully registered') || message.includes('already registered')) resolve();
+        else reject(`Registration failed: "${message}"`);
       });
     });
   }
@@ -114,9 +119,7 @@ function createBot() {
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
         if (message.includes('successfully logged in')) resolve();
-        else if (message.includes('Invalid password')) reject(`Login failed: Invalid password. Message: "${message}"`);
-        else if (message.includes('not registered')) reject(`Login failed: Not registered. Message: "${message}"`);
-        else reject(`Login failed: unexpected message "${message}".`);
+        else reject(`Login failed: "${message}"`);
       });
     });
   }
@@ -128,7 +131,6 @@ function createBot() {
     if (config.utils['auto-auth'].enabled) {
       console.log('[INFO] Started auto-auth module');
       const password = config.utils['auto-auth'].password;
-
       pendingPromise = pendingPromise
         .then(() => sendRegister(password))
         .then(() => sendLogin(password))
@@ -143,7 +145,7 @@ function createBot() {
         const delay = config.utils['chat-messages']['repeat-delay'];
         let i = 0;
         setInterval(() => {
-          bot.chat(`${messages[i]}`);
+          bot.chat(messages[i]);
           i = (i + 1) % messages.length;
         }, delay * 1000);
       } else {
@@ -151,9 +153,9 @@ function createBot() {
       }
     }
 
+    const pos = config.position;
     if (config.position.enabled) {
-      const pos = config.position;
-      console.log(`[Afk Bot] Moving to target location (${pos.x}, ${pos.y}, ${pos.z})`);
+      console.log(`[AfkBot] Moving to target location (${pos.x}, ${pos.y}, ${pos.z})`);
       bot.pathfinder.setMovements(defaultMove);
       bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
     }
@@ -165,13 +167,8 @@ function createBot() {
   });
 
   // === Bot Events ===
-  bot.on('goal_reached', () => {
-    console.log(`[AfkBot] Bot arrived at the target location: ${bot.entity.position}`);
-  });
-
-  bot.on('death', () => {
-    console.log(`[AfkBot] Bot died and respawned at ${bot.entity.position}`);
-  });
+  bot.on('goal_reached', () => console.log(`[AfkBot] Bot arrived at target location ${bot.entity.position}`));
+  bot.on('death', () => console.log(`[AfkBot] Bot died and respawned at ${bot.entity.position}`));
 
   if (config.utils['auto-reconnect']) {
     bot.on('end', () => {
@@ -181,8 +178,9 @@ function createBot() {
   }
 
   bot.on('kicked', (reason) => {
-    io.emit("clear"); // clear web console
-    console.log(`[AfkBot] Bot was kicked from the server. Reason:\n${reason}`);
+    // Clear web console before showing kick reason
+    io.emit("clear");
+    console.log(`[AfkBot] Bot was kicked from the server. Reason: ${reason}`);
     restartBot();
   });
 
