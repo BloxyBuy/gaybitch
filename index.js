@@ -15,7 +15,7 @@ const io = new Server(server);
 
 app.use(express.static("public")); // serve console frontend
 
-server.listen(8000, () => {
+server.listen(8000, '0.0.0.0', () => {
   console.log('Web server + Socket.io started on http://<your-vm-ip>:8000');
 });
 
