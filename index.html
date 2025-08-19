@@ -3,8 +3,14 @@
 <head>
   <title>Bot Console</title>
   <style>
-    body { font-family: monospace; background: #111; color: #0f0; padding: 10px; }
+    body { font-family: monospace; background: #111; color: white; padding: 10px; }
     #console { white-space: pre-wrap; }
+    .INFO { color: #00aaff; }
+    .DEBUG { color: #aaaaaa; }
+    .ERROR { color: #ff5555; }
+    .AfkBot { color: #55ff55; }
+    .AUTH { color: #ffaa00; }
+    .CHAT { color: #ff55ff; }
   </style>
 </head>
 <body>
@@ -16,10 +22,22 @@
     const socket = io();
     const consoleDiv = document.getElementById("console");
 
-    socket.on("log", msg => {
-      consoleDiv.innerHTML += msg + "\n";
+    function addMessage(msg) {
+      let className = 'INFO';
+      if (msg.includes('[DEBUG]')) className = 'DEBUG';
+      else if (msg.includes('[ERROR]')) className = 'ERROR';
+      else if (msg.includes('[AfkBot]')) className = 'AfkBot';
+      else if (msg.includes('[AUTH]')) className = 'AUTH';
+      else if (msg.includes('[CHAT]')) className = 'CHAT';
+
+      const div = document.createElement('div');
+      div.className = className;
+      div.textContent = msg;
+      consoleDiv.appendChild(div);
       window.scrollTo(0, document.body.scrollHeight);
-    });
+    }
+
+    socket.on('log', msg => addMessage(msg));
   </script>
 </body>
 </html>
