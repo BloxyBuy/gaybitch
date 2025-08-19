@@ -68,7 +68,8 @@ function createBot() {
     auth: config['bot-account']['type'],
     host: config.server.ip,
     port: config.server.port,
-    version: config.server.version,
+    version: config.server.version || false, // auto-detect if not set
+    timeout: 60000 // wait up to 60s before timing out
   });
 
   bot.loadPlugin(pathfinder);
@@ -77,6 +78,11 @@ function createBot() {
   bot.settings.colorsEnabled = false;
 
   let pendingPromise = Promise.resolve();
+
+  // === Debug Events ===
+  bot.on('login', () => console.log('[DEBUG] Bot is logging in...'));
+  bot.on('spawn', () => console.log('[DEBUG] Bot spawned successfully!'));
+  bot.on('end', () => console.log('[DEBUG] Bot connection ended.'));
 
   // === Auto Register ===
   function sendRegister(password) {
