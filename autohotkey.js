@@ -1,37 +1,20 @@
-PowerShell 7.4.11
+PS C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\public> node index.js
+node:internal/modules/cjs/loader:1368
+  throw err;
+  ^
 
-   A new PowerShell stable release is available: v7.5.2
-   Upgrade now, or check out the release page at:
-     https://aka.ms/PowerShell-Release?tag=v7.5.2
-
-PS C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot> node index.js
-[INFO] Generated new username: puWEs6R2mqYJl8C6
-Web server + Socket.io started on http://<your-vm-ip>:8000
-[AfkBot] Bot joined the server as puWEs6R2mqYJl8C6
-[INFO] Started chat-messages module
-[Afk Bot] Starting to move to target location (-108, 68, -6)
-Error: client timed out after 30000 milliseconds
-[ERROR] client timed out after 30000 milliseconds
-[INFO] Bot ended, auto-restarting...
-[INFO] Restarting bot...
-[INFO] Generated new username: PYOm9mxzSMBEYfmi
-[AfkBot] Bot joined the server as PYOm9mxzSMBEYfmi
-[INFO] Started chat-messages module
-[Afk Bot] Starting to move to target location (-108, 68, -6)
-node:events:496
-      throw er; // Unhandled 'error' event
-      ^
-
-Error: client timed out after 30000 milliseconds
-    at Timeout._onTimeout (C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\node_modules\minecraft-protocol\src\client\keepalive.js:18:28)
-    at listOnTimeout (node:internal/timers:588:17)
-    at process.processTimers (node:internal/timers:523:7)
-Emitted 'error' event at:
-    at Client.<anonymous> (C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\node_modules\mineflayer\lib\loader.js:99:9)
-    at Client.emit (node:events:518:28)
-    at Timeout._onTimeout (C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\node_modules\minecraft-protocol\src\client\keepalive.js:18:14)
-    at listOnTimeout (node:internal/timers:588:17)
-    at process.processTimers (node:internal/timers:523:7)
+Error: Cannot find module 'C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\public\index.js'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1365:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1021:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1026:22)
+    at Function._load (node:internal/modules/cjs/loader:1175:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
 
 Node.js v22.18.0
-PS C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot>
+PS C:\Users\kbercismp\Documents\Slobos-Aternos-AFK-Bot\public>
