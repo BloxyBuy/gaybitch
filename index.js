@@ -16,13 +16,24 @@ server.listen(8000, '0.0.0.0', () => {
   console.log('Web server + Socket.io started on http://<your-vm-ip>:8000');
 });
 
-// === Patch console.log to emit to browser ===
+// === Log buffer for sending past logs to new clients ===
+let logBuffer = [];
+const MAX_LOG_LINES = 1000;
+
+// === Patch console.log for CMD colors + web logs ===
 const oldLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
-  oldLog(msg);         // CMD log with colors
-  io.emit("log", msg); // send to browser
+  oldLog(msg);           // CMD log
+  logBuffer.push(msg);   // save to buffer
+  if (logBuffer.length > MAX_LOG_LINES) logBuffer.shift(); // remove oldest
+  io.emit("log", msg);   // broadcast to browser
 };
+
+// === Send past logs to new clients ===
+io.on("connection", (socket) => {
+  logBuffer.forEach(line => socket.emit("log", line));
+});
 
 // === Utility: Random Username Generator ===
 function randomUsername(length = 10) {
@@ -47,7 +58,10 @@ function restartBot() {
       console.error("[WARN] Error while ending bot:", err.message);
     }
   }
-  setTimeout(() => createBot(), config.utils['auto-recconect-delay'] || 5000);
+
+  setTimeout(() => {
+    createBot();
+  }, config.utils['auto-recconect-delay'] || 5000);
 }
 
 // === Main Bot Creation Function ===
@@ -68,11 +82,10 @@ function createBot() {
   bot.loadPlugin(pathfinder);
   const mcData = require('minecraft-data')(bot.version);
   const defaultMove = new Movements(bot, mcData);
-  bot.settings.colorsEnabled = false;
+  bot.settings.colorsEnabled = true;
 
   let pendingPromise = Promise.resolve();
 
-  // === Debug Events ===
   bot.on('login', () => console.log('[DEBUG] Bot is logging in...'));
   bot.on('spawn', () => console.log('[DEBUG] Bot spawned successfully!'));
   bot.on('end', () => console.log('[DEBUG] Bot connection ended.'));
@@ -82,9 +95,11 @@ function createBot() {
     return new Promise((resolve, reject) => {
       bot.chat(`/register ${password} ${password}`);
       console.log(`[Auth] Sent /register command.`);
+
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
-        if (message.includes('successfully registered') || message.includes('already registered')) resolve();
+        if (message.includes('successfully registered')) resolve();
+        else if (message.includes('already registered')) resolve();
         else if (message.includes('Invalid command')) reject(`Registration failed: Invalid command. Message: "${message}"`);
         else reject(`Registration failed: unexpected message "${message}".`);
       });
@@ -95,6 +110,7 @@ function createBot() {
     return new Promise((resolve, reject) => {
       bot.chat(`/login ${password}`);
       console.log(`[Auth] Sent /login command.`);
+
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
         if (message.includes('successfully logged in')) resolve();
@@ -112,6 +128,7 @@ function createBot() {
     if (config.utils['auto-auth'].enabled) {
       console.log('[INFO] Started auto-auth module');
       const password = config.utils['auto-auth'].password;
+
       pendingPromise = pendingPromise
         .then(() => sendRegister(password))
         .then(() => sendLogin(password))
@@ -121,19 +138,22 @@ function createBot() {
     if (config.utils['chat-messages'].enabled) {
       console.log('[INFO] Started chat-messages module');
       const messages = config.utils['chat-messages']['messages'];
+
       if (config.utils['chat-messages'].repeat) {
         const delay = config.utils['chat-messages']['repeat-delay'];
         let i = 0;
         setInterval(() => {
-          bot.chat(messages[i]);
+          bot.chat(`${messages[i]}`);
           i = (i + 1) % messages.length;
         }, delay * 1000);
-      } else messages.forEach(msg => bot.chat(msg));
+      } else {
+        messages.forEach(msg => bot.chat(msg));
+      }
     }
 
-    const pos = config.position;
     if (config.position.enabled) {
-      console.log(`[AfkBot] Moving to target location (${pos.x}, ${pos.y}, ${pos.z})`);
+      const pos = config.position;
+      console.log(`[Afk Bot] Moving to target location (${pos.x}, ${pos.y}, ${pos.z})`);
       bot.pathfinder.setMovements(defaultMove);
       bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
     }
@@ -146,12 +166,19 @@ function createBot() {
 
   // === Bot Events ===
   bot.on('goal_reached', () => {
-    console.log(`[AfkBot] Bot arrived at target location: ${bot.entity.position}`);
+    console.log(`[AfkBot] Bot arrived at the target location: ${bot.entity.position}`);
   });
 
   bot.on('death', () => {
-    console.log(`[AfkBot] Bot has died and respawned at ${bot.entity.position}`);
+    console.log(`[AfkBot] Bot died and respawned at ${bot.entity.position}`);
   });
+
+  if (config.utils['auto-reconnect']) {
+    bot.on('end', () => {
+      console.log("[INFO] Bot ended, auto-restarting...");
+      restartBot();
+    });
+  }
 
   bot.on('kicked', (reason) => {
     io.emit("clear"); // clear web console
@@ -160,13 +187,6 @@ function createBot() {
   });
 
   bot.on('error', (err) => console.log(`[ERROR] ${err.message}`));
-
-  if (config.utils['auto-reconnect']) {
-    bot.on('end', () => {
-      console.log("[INFO] Bot ended, auto-restarting...");
-      restartBot();
-    });
-  }
 }
 
 createBot();
