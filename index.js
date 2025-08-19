@@ -8,7 +8,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-// === Express + Socket.io setup ===
+// ===== Express + Socket.io setup =====
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -19,15 +19,32 @@ server.listen(8000, '0.0.0.0', () => {
   console.log('Web server + Socket.io started on http://<your-vm-ip>:8000');
 });
 
-// === Patch console.log so logs also show in browser ===
+// ===== Log buffer for past messages =====
+const logBuffer = [];
+const MAX_LOGS = 1000; // store last 1000 lines
+
+// ===== Patch console.log to send to browser =====
 const oldLog = console.log;
 console.log = (...args) => {
   const msg = args.join(" ");
-  oldLog(msg);         // still log in VM terminal
-  io.emit("log", msg); // broadcast to browser
+  oldLog(msg); // still log in VM terminal
+
+  // remove CMD color codes
+  const cleanMsg = msg.replace(/\x1b\[[0-9;]*m/g, "");
+
+  // add to buffer
+  logBuffer.push(cleanMsg);
+  if (logBuffer.length > MAX_LOGS) logBuffer.shift(); // maintain max buffer
+
+  io.emit("log", cleanMsg); // broadcast to all clients
 };
 
-// === Utility: Random Username Generator ===
+// ===== Send buffer to new clients =====
+io.on("connection", (socket) => {
+  logBuffer.forEach(line => socket.emit("log", line));
+});
+
+// ===== Utility: Random Username Generator =====
 function randomUsername(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let result = "";
@@ -39,7 +56,7 @@ function randomUsername(length = 10) {
 
 let bot; // global reference
 
-// === Restart Bot Helper ===
+// ===== Restart Bot Helper =====
 function restartBot() {
   if (bot) {
     console.log("[INFO] Restarting bot...");
@@ -56,9 +73,9 @@ function restartBot() {
   }, config.utils['auto-recconect-delay'] || 5000);
 }
 
-// === Main Bot Creation Function ===
+// ===== Main Bot Creation Function =====
 function createBot() {
-  // 👇 generate and log new username each time
+  // generate new username each time
   config["bot-account"]["username"] = randomUsername(16);
   console.log(`[INFO] Generated new username: ${config["bot-account"]["username"]}`);
 
@@ -68,8 +85,8 @@ function createBot() {
     auth: config['bot-account']['type'],
     host: config.server.ip,
     port: config.server.port,
-    version: config.server.version || false, // auto-detect if not set
-    timeout: 60000 // wait up to 60s before timing out
+    version: config.server.version || false,
+    timeout: 60000
   });
 
   bot.loadPlugin(pathfinder);
@@ -79,12 +96,12 @@ function createBot() {
 
   let pendingPromise = Promise.resolve();
 
-  // === Debug Events ===
+  // ===== Debug Events =====
   bot.on('login', () => console.log('[DEBUG] Bot is logging in...'));
   bot.on('spawn', () => console.log('[DEBUG] Bot spawned successfully!'));
   bot.on('end', () => console.log('[DEBUG] Bot connection ended.'));
 
-  // === Auto Register ===
+  // ===== Auto Register/Login =====
   function sendRegister(password) {
     return new Promise((resolve, reject) => {
       bot.chat(`/register ${password} ${password}`);
@@ -92,12 +109,8 @@ function createBot() {
 
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
-
-        if (message.includes('successfully registered')) {
+        if (message.includes('successfully registered') || message.includes('already registered')) {
           console.log('[INFO] Registration confirmed.');
-          resolve();
-        } else if (message.includes('already registered')) {
-          console.log('[INFO] Bot was already registered.');
           resolve();
         } else if (message.includes('Invalid command')) {
           reject(`Registration failed: Invalid command. Message: "${message}"`);
@@ -108,7 +121,6 @@ function createBot() {
     });
   }
 
-  // === Auto Login ===
   function sendLogin(password) {
     return new Promise((resolve, reject) => {
       bot.chat(`/login ${password}`);
@@ -116,7 +128,6 @@ function createBot() {
 
       bot.once('chat', (username, message) => {
         console.log(`[ChatLog] <${username}> ${message}`);
-
         if (message.includes('successfully logged in')) {
           console.log('[INFO] Login successful.');
           resolve();
@@ -131,13 +142,12 @@ function createBot() {
     });
   }
 
-  // === On Spawn ===
+  // ===== On Spawn =====
   bot.once('spawn', () => {
-    console.log(`\x1b[33m[AfkBot] Bot joined the server as ${config['bot-account']['username']}\x1b[0m`);
+    console.log(`[AfkBot] Bot joined the server as ${config['bot-account']['username']}`);
 
     if (config.utils['auto-auth'].enabled) {
       console.log('[INFO] Started auto-auth module');
-
       const password = config.utils['auto-auth'].password;
 
       pendingPromise = pendingPromise
@@ -156,51 +166,29 @@ function createBot() {
 
         setInterval(() => {
           bot.chat(`${messages[i]}`);
-
-          if (i + 1 === messages.length) {
-            i = 0;
-          } else {
-            i++;
-          }
+          i = (i + 1) % messages.length;
         }, delay * 1000);
       } else {
-        messages.forEach((msg) => {
-          bot.chat(msg);
-        });
+        messages.forEach(msg => bot.chat(msg));
       }
     }
 
     const pos = config.position;
-
     if (config.position.enabled) {
-      console.log(
-        `\x1b[32m[Afk Bot] Starting to move to target location (${pos.x}, ${pos.y}, ${pos.z})\x1b[0m`
-      );
+      console.log(`[AfkBot] Moving to target location (${pos.x}, ${pos.y}, ${pos.z})`);
       bot.pathfinder.setMovements(defaultMove);
       bot.pathfinder.setGoal(new GoalBlock(pos.x, pos.y, pos.z));
     }
 
     if (config.utils['anti-afk'].enabled) {
       bot.setControlState('jump', true);
-      if (config.utils['anti-afk'].sneak) {
-        bot.setControlState('sneak', true);
-      }
+      if (config.utils['anti-afk'].sneak) bot.setControlState('sneak', true);
     }
   });
 
-  // === Bot Events ===
-  bot.on('goal_reached', () => {
-    console.log(
-      `\x1b[32m[AfkBot] Bot arrived at the target location. ${bot.entity.position}\x1b[0m`
-    );
-  });
-
-  bot.on('death', () => {
-    console.log(
-      `\x1b[33m[AfkBot] Bot has died and was respawned at ${bot.entity.position}`,
-      '\x1b[0m'
-    );
-  });
+  // ===== Bot Events =====
+  bot.on('goal_reached', () => console.log(`[AfkBot] Bot arrived at the target location.`));
+  bot.on('death', () => console.log(`[AfkBot] Bot has died and respawned.`));
 
   if (config.utils['auto-reconnect']) {
     bot.on('end', () => {
@@ -209,18 +197,13 @@ function createBot() {
     });
   }
 
-  bot.on('kicked', (reason) => {
-    console.log(
-      '\x1b[33m',
-      `[AfkBot] Bot was kicked from the server. Reason: \n${reason}`,
-      '\x1b[0m'
-    );
+  bot.on('kicked', reason => {
+    console.log(`[AfkBot] Bot was kicked. Reason: ${reason}`);
     restartBot();
   });
 
-  bot.on('error', (err) =>
-    console.log(`\x1b[31m[ERROR] ${err.message}`, '\x1b[0m')
-  );
+  bot.on('error', err => console.log(`[ERROR] ${err.message}`));
 }
 
+// ===== Start Bot =====
 createBot();
